@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CardioTwin Minimal Dashboard</title>
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: #121821;
+      --accent: #00e87a;
+      --text: #e6f1ec;
+      --muted: #6b7a86;
+      --danger: #ff4d6d;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font-family:"Segoe UI",system-ui,sans-serif; }
+    header { padding:12px 18px; display:grid; grid-template-columns:auto 1fr auto auto auto; gap:10px; align-items:center; background:#0d131c; border-bottom:1px solid #1c2734; }
+    input, button { background:#0f1620; border:1px solid #1f2b3a; color:var(--text); padding:8px 10px; border-radius:6px; font-size:14px; }
+    button { cursor:pointer; }
+    .status { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border-radius:20px; background:#111926; border:1px solid #1f2b3a; font-size:13px; }
+    .dot { width:10px; height:10px; border-radius:50%; background:var(--muted); box-shadow:0 0 8px transparent; }
+    .ok { background:var(--accent); box-shadow:0 0 10px var(--accent); }
+    .bad { background:var(--danger); box-shadow:0 0 8px var(--danger); }
+    main { padding:16px; display:grid; gap:16px; grid-template-columns:2fr 1fr; }
+    canvas { width:100%; height:240px; background:#0a1018; border:1px solid #1c2734; border-radius:8px; }
+    .panel { background:var(--panel); border:1px solid #1c2734; border-radius:10px; padding:14px; }
+    h2 { margin:0 0 10px 0; font-size:16px; }
+    .metrics { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; }
+    .metric { background:#0f1620; padding:10px; border-radius:8px; border:1px solid #1f2b3a; }
+    .metric .label { font-size:12px; color:var(--muted); }
+    .metric .value { font-size:22px; margin-top:4px; }
+    pre { background:#0f1620; padding:10px; border-radius:8px; max-height:220px; overflow:auto; border:1px solid #1f2b3a; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .diag-chip { padding:6px 10px; border:1px solid #1f2b3a; border-radius:14px; font-size:12px; margin:4px; background:#0f1620; color:var(--muted); }
+    .diag-chip.active { border-color:var(--accent); color:var(--accent); box-shadow:0 0 8px rgba(0,232,122,0.3); }
+  </style>
+</head>
+<body>
+  <header>
+    <div style="font-weight:700; color:var(--accent); white-space:nowrap;">CardioTwin · Minimal</div>
+    <div class="row" style="flex:1; min-width:320px;">
+      <!-- Default points to your Railway web URL -->
+      <input id="backend" style="flex:1;" value="https://web-production-7c851.up.railway.app" />
+      <button id="connectBtn">Connect</button>
+      <a href="cardiac_digital_twin.html" style="color:var(--muted); font-size:12px; text-decoration:none;">Full UI</a>
+      <button id="homeBtn" style="font-size:12px;">Home</button>
+    </div>
+    <div class="status" id="healthStatus"><span class="dot" id="healthDot"></span><span id="healthText">Health: unknown</span></div>
+    <div class="status" id="wsStatus"><span class="dot" id="wsDot"></span><span id="wsText">WS: disconnected</span></div>
+    <div class="row" style="min-width:220px;">
+      <input id="quickPatient" placeholder="New patient: name|email|age" style="flex:1; font-size:12px;">
+      <button id="quickCreate" style="font-size:12px;">Create</button>
+    </div>
+  </header>
+
+  <main style="grid-template-columns:2fr 1fr;">
+    <section class="panel" style="grid-column:1 / span 1;">
+      <h2>Live ECG</h2>
+      <canvas id="ecg"></canvas>
+    </section>
+    <section class="panel" style="grid-column:1 / span 1;">
+      <h2>Stats</h2>
+      <div class="metrics">
+        <div class="metric"><div class="label">Raw samples</div><div class="value" id="rawCount">0</div></div>
+        <div class="metric"><div class="label">Beats per min</div><div class="value" id="beatBpm">--</div></div>
+        <div class="metric"><div class="label">HR (bpm)</div><div class="value" id="lastHR">--</div></div>
+        <div class="metric"><div class="label">HRV (ms)</div><div class="value" id="lastHRV">--</div></div>
+        <div class="metric"><div class="label">RR interval (ms)</div><div class="value" id="lastRR">--</div></div>
+        <div class="metric"><div class="label">QRS duration (ms)</div><div class="value" id="lastQRS">--</div></div>
+        <div class="metric"><div class="label">Last Class</div><div class="value" id="lastClass">--</div></div>
+      </div>
+    </section>
+    <section class="panel" style="grid-column:1 / span 1;">
+      <h2>Diagnosis (AAMI 5-class)</h2>
+      <div style="margin-bottom:8px; font-size:13px;">Current: <span id="diagCurrent" style="color:var(--accent);">--</span></div>
+      <div id="diagList" style="display:flex; flex-wrap:wrap;"></div>
+    </section>
+    <section class="panel" style="grid-column:2 / span 1;">
+      <h2>Controls</h2>
+      <div class="row" style="margin-bottom:8px; flex-direction:column; align-items:flex-start;">
+        <label><input type="checkbox" id="simMode" checked> Simulator mode</label>
+        <label><input type="checkbox" id="connectArduino"> Connect Arduino</label>
+        <label><input type="checkbox" id="apiNeeded"> API key needed</label>
+        <label><input type="checkbox" id="ecgLive" checked> ECG live</label>
+      </div>
+      <div style="border-top:1px solid #1f2b3a; margin:8px 0;"></div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Lifestyle sliders</div>
+      <div class="row" style="flex-direction:column; align-items:flex-start; gap:6px; width:100%;">
+        <label>Sleep hrs: <input id="sleepInput" type="range" min="4" max="10" step="1" value="7" style="width:180px;"></label>
+        <label>Exercise d/wk: <input id="exerciseInput" type="range" min="0" max="7" step="1" value="3" style="width:180px;"></label>
+        <label>Stress 0-10: <input id="stressInput" type="range" min="0" max="10" step="1" value="5" style="width:180px;"></label>
+        <label>Water glasses: <input id="waterInput" type="range" min="0" max="12" step="1" value="6" style="width:180px;"></label>
+        <label>Age: <input id="ageInput" type="range" min="10" max="90" step="1" value="35" style="width:180px;"></label>
+      </div>
+      <div style="border-top:1px solid #1f2b3a; margin:8px 0;"></div>
+      <div class="row" style="flex-direction:column; align-items:flex-start; gap:6px;">
+        <label><input type="checkbox" id="rfSmoking"> Smoking</label>
+        <label><input type="checkbox" id="rfDiabetes"> Diabetes</label>
+        <label><input type="checkbox" id="rfHypertension"> Hypertension</label>
+        <label><input type="checkbox" id="rfFamily"> Family history</label>
+      </div>
+      <button style="margin-top:10px; width:100%; background:var(--accent); color:#000;" id="runSim">Run AI Simulation</button>
+    </section>
+    <section class="panel">
+      <h2>Patient / Sessions</h2>
+      <div class="row" style="margin-bottom:8px;">
+        <input id="patientId" placeholder="Patient ID" style="width:120px;">
+        <button id="loadPatient">Load</button>
+        <span id="patientInfo" style="color:var(--muted); font-size:13px;"></span>
+      </div>
+      <div class="row" style="margin-bottom:8px;">
+        <input id="newPatientName" placeholder="Name" style="width:140px;">
+        <input id="newPatientEmail" placeholder="Email" style="width:140px;">
+        <input id="newPatientAge" placeholder="Age" style="width:80px;">
+        <button id="createPatient">Create</button>
+      </div>
+      <div id="sessions" style="font-size:13px; color:var(--text); max-height:180px; overflow:auto;"></div>
+    </section>
+    <section class="panel">
+      <h2>Risk / SHAP (latest)</h2>
+      <div class="metrics">
+        <div class="metric"><div class="label">Risk %</div><div class="value" id="riskScore">--</div></div>
+        <div class="metric"><div class="label">Label</div><div class="value" id="riskLabel">--</div></div>
+      </div>
+      <div id="shapBars" style="margin-top:10px;"></div>
+    </section>
+    <section class="panel" style="grid-column:1 / span 2;">
+      <h2>Gemini Chat</h2>
+      <div class="row" style="margin-bottom:8px;">
+        <input id="geminiKey" placeholder="Gemini API key" style="flex:1; min-width:260px;">
+        <button id="sendChat">Ask</button>
+      </div>
+      <textarea id="chatPrompt" rows="3" style="width:100%; background:#0f1620; color:var(--text); border:1px solid #1f2b3a; border-radius:8px; padding:8px;" placeholder="Ask about the latest ECG or risk..."></textarea>
+      <pre id="chatLog" style="margin-top:8px; max-height:160px;"></pre>
+    </section>
+    <section class="panel" style="grid-column:1 / span 2;">
+      <h2>Recent Messages</h2>
+      <pre id="log"></pre>
+    </section>
+    <section class="panel" style="grid-column:1 / span 2;">
+      <h2>About</h2>
+      <p style="font-size:13px; color:var(--muted); line-height:1.6;">
+        CardioTwin Minimal connects to your FastAPI backend on Railway, streams raw ECG via WebSocket, shows beat classifications,
+        and lets you manage patients/sessions. For production, keep the backend URL set to your Railway domain (or custom domain).
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const patientIdInput = document.getElementById('patientId');
+    const patientInfo = document.getElementById('patientInfo');
+    const sessionsDiv = document.getElementById('sessions');
+    const riskScoreEl = document.getElementById('riskScore');
+    const riskLabelEl = document.getElementById('riskLabel');
+    const shapBars = document.getElementById('shapBars');
+    const chatPrompt = document.getElementById('chatPrompt');
+    const chatLog = document.getElementById('chatLog');
+    const geminiKeyInput = document.getElementById('geminiKey');
+    const backendInput = document.getElementById('backend');
+    const healthDot = document.getElementById('healthDot');
+    const healthText = document.getElementById('healthText');
+    const wsDot = document.getElementById('wsDot');
+    const wsText = document.getElementById('wsText');
+    const logEl = document.getElementById('log');
+    const canvas = document.getElementById('ecg');
+    const ctx = canvas.getContext('2d');
+    const diagList = document.getElementById('diagList');
+    const diagCurrent = document.getElementById('diagCurrent');
+    const aamiClasses = ["Normal","SVE","PVC","Fusion","Unknown"];
+    const BUFFER_LEN = 400;
+    let ws, rawCount=0;
+    let recentHR = [];
+    let beatTimes = [];
+    let w=0, h=0, ecgBuf=new Array(800).fill(0);
+    let currentClass = '--';
+
+    function resize(){ canvas.width=canvas.clientWidth; canvas.height=canvas.clientHeight; w=canvas.width; h=canvas.height; draw(); }
+    window.addEventListener('resize', resize); resize();
+
+    function draw(){
+      ctx.clearRect(0,0,w,h);
+      ctx.strokeStyle='#123'; ctx.beginPath();
+      for(let x=0;x<=w;x+=20){ctx.moveTo(x,0);ctx.lineTo(x,h);}
+      for(let y=0;y<=h;y+=20){ctx.moveTo(0,y);ctx.lineTo(w,y);}
+      ctx.stroke();
+      ctx.strokeStyle='#0f7'; ctx.lineWidth=2; ctx.beginPath();
+      const step = w/(ecgBuf.length-1);
+      ecgBuf.forEach((v,i)=>{ const y=h/2 - v*(h*0.4); if(i===0) ctx.moveTo(0,y); else ctx.lineTo(i*step,y); });
+      ctx.stroke();
+    }
+
+    function resetStats(){
+      rawCount=0; recentHR=[]; beatTimes=[]; currentClass='--';
+      ['rawCount','beatBpm','lastHR','lastHRV','lastRR','lastQRS','lastClass'].forEach(id=>document.getElementById(id).textContent='--');
+      document.getElementById('rawCount').textContent='0';
+      renderDiagnosis('--'); ecgBuf=new Array(BUFFER_LEN).fill(0); draw();
+    }
+
+    function log(msg){ logEl.textContent = (new Date().toLocaleTimeString())+"  "+msg+"\n"+logEl.textContent.slice(0,5000); }
+
+    async function checkHealth(url){
+      setStatus(healthDot, healthText, 'checking','Health: checking');
+      try{
+        const r = await fetch(url+'/health');
+        if(!r.ok) throw new Error(r.status);
+        const j = await r.json();
+        setStatus(healthDot, healthText, 'ok', `Health: ok (${j.db || 'db?'})`);
+        return true;
+      }catch(e){
+        setStatus(healthDot, healthText, 'bad','Health: fail');
+        return false;
+      }
+    }
+
+    function setStatus(dot, textEl, state, label){
+      dot.classList.remove('ok','bad');
+      if(state==='ok') dot.classList.add('ok'); else if(state==='bad') dot.classList.add('bad');
+      textEl.textContent = label;
+    }
+
+    function connectWS(url){
+      if(ws) ws.close();
+      const wsUrl = url.replace('http','ws') + '/ws';
+      ws = new WebSocket(wsUrl);
+      ws.onopen = ()=>{ setStatus(wsDot, wsText, 'ok','WS: connected'); log('WS connected'); };
+      ws.onclose= ()=>{ setStatus(wsDot, wsText, 'bad','WS: disconnected'); log('WS closed'); resetStats(); };
+      ws.onerror= ()=>{ setStatus(wsDot, wsText, 'bad','WS: error'); log('WS error'); };
+      ws.onmessage = ev=>{
+        try{
+          const data = JSON.parse(ev.data);
+          if(data.type==='raw'){
+            rawCount++; document.getElementById('rawCount').textContent=rawCount;
+            const norm = (data.value - 2048)/2048;
+            ecgBuf.push(norm); if(ecgBuf.length>BUFFER_LEN) ecgBuf.shift(); draw();
+          }else if(data.type==='beat'){
+            if(data.hr){ recentHR.push(data.hr); if(recentHR.length>20) recentHR.shift();
+              beatTimes.push(Date.now()); while(beatTimes.length && Date.now()-beatTimes[0]>60000) beatTimes.shift();
+              const bpm = beatTimes.length>1 ? Math.round(beatTimes.length*60000/(Date.now()-beatTimes[0])) : data.hr;
+              document.getElementById('beatBpm').textContent = bpm;
+              document.getElementById('lastHR').textContent = data.hr ?? '--';
+            }
+            if(data.hrv !== undefined) document.getElementById('lastHRV').textContent = data.hrv;
+            if(data.rr !== undefined) document.getElementById('lastRR').textContent = data.rr;
+            if(data.qrs_duration !== undefined) document.getElementById('lastQRS').textContent = data.qrs_duration;
+            currentClass = data.class || data.class_name || data.ecg_type || '--';
+            document.getElementById('lastClass').textContent = currentClass;
+            renderDiagnosis(currentClass);
+            riskScoreEl.textContent = data.hr ? Math.min(99, Math.max(10, Math.round(120 - data.hr))) : '--';
+            riskLabelEl.textContent = currentClass || 'normal';
+            renderShap({HRV: data.hrv ? Math.max(8, Math.min(30, Math.round(30 - data.hrv/10))) : 22,
+                        Sleep: 18, Stress: 16, Exercise: 15, Age: 12, Smoking:10});
+          }
+          log(ev.data);
+        }catch(err){ log('WS parse error'); }
+      };
+    }
+
+    document.getElementById('connectBtn').onclick = async ()=>{
+      const url = backendInput.value.trim().replace(/\/$/,'');
+      resetStats();
+      const ok = await checkHealth(url);
+      if(ok) connectWS(url);
+    };
+    document.getElementById('connectBtn').click(); // auto-connect
+
+    // Patient loading
+    document.getElementById('loadPatient').onclick = async ()=>{
+      const pid = patientIdInput.value.trim();
+      const base = backendInput.value.trim().replace(/\/$/,'');
+      if(!pid) return;
+      try{
+        const analytics = await fetch(base+'/analytics/'+pid).then(r=>r.json());
+        patientInfo.textContent = `${analytics.patient_name || 'Patient'} | Risk ${analytics.latest_risk_score ?? '--'} | Sessions ${analytics.total_sessions}`;
+        riskScoreEl.textContent = analytics.latest_risk_score ?? '--';
+        riskLabelEl.textContent = analytics.latest_risk_score ? (analytics.latest_risk_score>60?'High':analytics.latest_risk_score>35?'Moderate':'Low') : '--';
+        renderShap({HRV:22,Sleep:18,Stress:16,Exercise:15,Age:12,Smoking:10});
+        const sessions = await fetch(base+`/sessions/${pid}/history?limit=10`).then(r=>r.json());
+        sessionsDiv.innerHTML = sessions.map(s=>`#${s.id} | ${s.source} | ${s.started_at}`).join('<br>');
+      }catch(e){ patientInfo.textContent = 'Load failed'; }
+    };
+
+    // Create patient
+    document.getElementById('createPatient').onclick = async ()=>{
+      const base = backendInput.value.trim().replace(/\/$/,'');
+      const name = document.getElementById('newPatientName').value.trim();
+      const email = document.getElementById('newPatientEmail').value.trim();
+      const age = parseInt(document.getElementById('newPatientAge').value.trim() || '30', 10);
+      if(!name || !email){ patientInfo.textContent = 'Name and email required.'; return; }
+      try{
+        const res = await fetch(base+'/patients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,age,gender:"U"})});
+        const p = await res.json();
+        if(p.id){ patientIdInput.value = p.id; patientInfo.textContent = `Created patient ${p.name} (ID ${p.id})`; }
+        else { patientInfo.textContent = 'Create failed'; }
+      }catch(e){ patientInfo.textContent = 'Create failed'; }
+    };
+
+    // Quick create from header: "name|email|age"
+    document.getElementById('quickCreate').onclick = async ()=>{
+      const base = backendInput.value.trim().replace(/\/$/,'');
+      const txt = document.getElementById('quickPatient').value.trim();
+      const parts = txt.split('|');
+      if(parts.length < 2){ patientInfo.textContent='Format: name|email|age'; return; }
+      const [name,email,ageStr] = parts;
+      const age = parseInt(ageStr || '30', 10);
+      try{
+        const res = await fetch(base+'/patients',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,email,age,gender:"U"})});
+        const p = await res.json();
+        if(p.id){ patientIdInput.value = p.id; patientInfo.textContent = `Created ${p.name} (ID ${p.id})`; }
+        else { patientInfo.textContent = 'Create failed'; }
+      }catch(e){ patientInfo.textContent = 'Create failed'; }
+    };
+
+    // Home button
+    document.getElementById('homeBtn').onclick = ()=>{ window.location.href = 'index.html'; };
+
+    function renderShap(obj){
+      shapBars.innerHTML=''; const max=Math.max(...Object.values(obj));
+      Object.entries(obj).forEach(([k,v])=>{
+        const row=document.createElement('div'); row.style.display='flex'; row.style.alignItems='center'; row.style.gap='8px'; row.style.marginBottom='6px';
+        row.innerHTML=`<span style="width:80px;font-size:12px;color:var(--muted);text-align:right;">${k}</span>
+          <div style="flex:1;height:10px;background:#0f1620;border:1px solid #1f2b3a;border-radius:4px;overflow:hidden;">
+            <div style="height:100%;width:${(v/max)*100}%;background:var(--accent);"></div>
+          </div>
+          <span style="width:32px;font-size:12px;color:var(--text);">${v}</span>`;
+        shapBars.appendChild(row);
+      });
+    }
+
+    function renderDiagnosis(cls){
+      diagCurrent.textContent = cls || '--';
+      diagList.innerHTML = '';
+      aamiClasses.forEach(c=>{
+        const chip=document.createElement('div');
+        chip.className='diag-chip'+(c.toLowerCase()===(cls||'').toLowerCase()?' active':'');
+        chip.textContent=c;
+        diagList.appendChild(chip);
+      });
+    }
+
+    const sleepInput=document.getElementById('sleepInput');
+    const exerciseInput=document.getElementById('exerciseInput');
+    const stressInput=document.getElementById('stressInput');
+    const waterInput=document.getElementById('waterInput');
+    const ageInput=document.getElementById('ageInput');
+    const rfSmoking=document.getElementById('rfSmoking');
+    const rfDiabetes=document.getElementById('rfDiabetes');
+    const rfHypertension=document.getElementById('rfHypertension');
+    const rfFamily=document.getElementById('rfFamily');
+
+    function computeRiskFromControls(){
+      const sleep=Number(sleepInput.value), ex=Number(exerciseInput.value), stress=Number(stressInput.value), water=Number(waterInput.value), age=Number(ageInput.value);
+      let risk=10;
+      risk+=Math.max(0,(8-sleep))*1.5;
+      risk+=Math.max(0,(5-ex))*2;
+      risk+=stress*1.2;
+      risk+=Math.max(0,(10-water))*0.8;
+      risk+=Math.max(0,(age-40))*0.5;
+      if(rfSmoking.checked) risk+=10;
+      if(rfDiabetes.checked) risk+=8;
+      if(rfHypertension.checked) risk+=6;
+      if(rfFamily.checked) risk+=4;
+      risk=Math.min(99,Math.max(5,Math.round(risk)));
+      const label=risk>70?'High':risk>45?'Moderate':'Low';
+      const shap={
+        HRV: Math.max(8,30 - stress*1.2),
+        Sleep: Math.max(8,(10 - sleep)*2 + 10),
+        Stress: Math.max(8, stress*1.5),
+        Exercise: Math.max(8,(5 - ex)*2 + 8),
+        Age: Math.max(8,(age-30)*0.6),
+        Smoking: rfSmoking.checked ? 14 : 8
+      };
+      return {risk,label,shap};
+    }
+
+    function updateRiskUI(){
+      const {risk,label,shap} = computeRiskFromControls();
+      riskScoreEl.textContent=risk;
+      riskLabelEl.textContent=label;
+      renderShap(shap);
+    }
+
+    [sleepInput,exerciseInput,stressInput,waterInput,ageInput,rfSmoking,rfDiabetes,rfHypertension,rfFamily]
+      .filter(Boolean).forEach(el=>{
+        el.addEventListener('input', updateRiskUI);
+        el.addEventListener('change', updateRiskUI);
+      });
+    document.getElementById('runSim').onclick = updateRiskUI;
+
+    resetStats(); updateRiskUI(); renderDiagnosis('--');
+
+    // Gemini chat
+    document.getElementById('sendChat').onclick = async ()=>{
+      const key = geminiKeyInput.value.trim();
+      if(!key){ chatLog.textContent='Set Gemini key first.'; return; }
+      const prompt = chatPrompt.value.trim() || 'Summarize latest ECG and risk.';
+      chatLog.textContent='Calling Gemini...';
+      try{
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:300,temperature:0.7}})
+        });
+        const j = await res.json();
+        chatLog.textContent = j?.candidates?.[0]?.content?.parts?.[0]?.text || JSON.stringify(j,null,2);
+      }catch(err){ chatLog.textContent='Gemini error: '+err.message; }
+    };
+  </script>
+</body>
+</html>
