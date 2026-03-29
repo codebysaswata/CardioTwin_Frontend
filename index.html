@@ -644,9 +644,9 @@ function goToDashboard(e) {
   if(currentPath.includes('/')) {
     // Replace last path segment with the dashboard filename
     const base = currentPath.substring(0, currentPath.lastIndexOf('/') + 1);
-    target = base + 'cardiac_digital_twin.html';
+    target = base + 'dashboard.html';
   } else {
-    target = 'cardiac_digital_twin.html';
+    target = 'dashboard.html';
   }
 
   // Preserve query string and hash if any (for preview servers)
@@ -655,7 +655,7 @@ function goToDashboard(e) {
 }
 
 // Attach smart navigation to ALL dashboard links
-document.querySelectorAll('a[href="cardiac_digital_twin.html"]').forEach(link => {
+document.querySelectorAll('a[href="dashboard.html"]').forEach(link => {
   link.addEventListener('click', goToDashboard);
 });
 </script>
