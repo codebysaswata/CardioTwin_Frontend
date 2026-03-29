@@ -398,7 +398,7 @@ footer {
     <a href="#how">How It Works</a>
     <a href="#features">Features</a>
     <a href="#tech">Tech Stack</a>
-    <a href="simple_dashboard.html" class="nav-cta">Open Dashboard →</a>
+    <a href="dashboard.html" class="nav-cta">Open Dashboard →</a>
   </div>
 </nav>
 
@@ -433,7 +433,7 @@ footer {
   </p>
 
   <div class="hero-actions">
-    <a href="simple_dashboard.html" class="btn-primary">
+    <a href="dashboard.html" class="btn-primary">
       Open Dashboard
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </a>
@@ -571,7 +571,7 @@ footer {
   <div class="cta-glow"></div>
   <h2>Ready to monitor<br><em>your heart?</em></h2>
   <p>Open the dashboard. Paste your Gemini key. Your cardiac digital twin is live.</p>
-    <a href="simple_dashboard.html" class="btn-primary" style="display:inline-flex;">
+    <a href="dashboard.html" class="btn-primary" style="display:inline-flex;">
       Launch Dashboard
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </a>
@@ -582,7 +582,7 @@ footer {
   <span class="footer-brand">CardioTwin</span>
   <span class="footer-note">⚠ Not a medical device. For educational and research use only.</span>
   <div class="footer-links">
-    <a href="cardiac_digital_twin.html">Dashboard</a>
+    <a href="dashboard.html">Dashboard</a>
     <a href="#how">How It Works</a>
     <a href="#tech">Tech Stack</a>
   </div>
@@ -639,7 +639,7 @@ function goToDashboard(e) {
   const currentUrl = window.location.href;
   const currentPath = window.location.pathname;
 
-  // Build the target path by replacing current filename with cardiac_digital_twin.html
+  // Build the target path by replacing current filename with dashboard.html
   let target;
   if(currentPath.includes('/')) {
     // Replace last path segment with the dashboard filename
